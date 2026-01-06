@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use base_reth_flashblocks::FlashblocksState;
 use futures_util::TryStreamExt;
-use reth_exex::ExExEvent;
+use reth_exex::{ExExEvent, ExExNotification};
 
 use crate::{
     BaseNodeConfig, FlashblocksConfig,
@@ -51,14 +51,19 @@ impl BaseNodeExtension for FlashblocksCanonExtension {
 
                 Ok(async move {
                     while let Some(note) = ctx.notifications.try_next().await? {
-                        if let Some(committed) = note.committed_chain() {
-                            let tip = committed.tip().num_hash();
-                            let chain = Arc::unwrap_or_clone(committed);
-                            for (_, block) in chain.into_blocks() {
-                                fb.on_canonical_block_received(block);
+                        let tip = match note {
+                            ExExNotification::ChainCommitted { new }
+                            | ExExNotification::ChainReorged { new, .. } => {
+                                let tip = new.tip().num_hash();
+                                let chain = Arc::unwrap_or_clone(new);
+                                for (_, block) in chain.into_blocks() {
+                                    fb.on_canonical_block_received(block);
+                                }
+                                tip
                             }
-                            let _ = ctx.events.send(ExExEvent::FinishedHeight(tip));
-                        }
+                            ExExNotification::ChainReverted { old } => old.tip().num_hash(),
+                        };
+                        let _ = ctx.events.send(ExExEvent::FinishedHeight(tip));
                     }
                     Ok(())
                 })
