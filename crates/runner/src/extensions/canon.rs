@@ -6,6 +6,7 @@ use std::sync::Arc;
 use base_reth_flashblocks::FlashblocksState;
 use futures_util::TryStreamExt;
 use reth_exex::{ExExEvent, ExExNotification};
+use tracing::info;
 
 use crate::{
     BaseNodeConfig, FlashblocksConfig,
@@ -63,7 +64,10 @@ impl BaseNodeExtension for FlashblocksCanonExtension {
                             }
                             ExExNotification::ChainReverted { old } => old.tip().num_hash(),
                         };
-                        let _ = ctx.events.send(ExExEvent::FinishedHeight(tip));
+                        info!(target: "flashblocks-canon", block_number = tip.number, block_hash = ?tip.hash, "Emitting FinishedHeight");
+                        if let Err(e) = ctx.events.send(ExExEvent::FinishedHeight(tip)) {
+                            info!(target: "flashblocks-canon", error = %e, "Failed to send FinishedHeight event");
+                        }
                     }
                     Ok(())
                 })
