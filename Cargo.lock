@@ -1491,6 +1491,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "base-bin"
+version = "0.2.1"
+dependencies = [
+ "alloy-chains",
+ "alloy-provider",
+ "alloy-rpc-types-eth",
+ "anyhow",
+ "base-cli",
+ "clap",
+ "derive_more",
+ "futures-util",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "base-cli"
+version = "0.2.1"
+dependencies = [
+ "clap",
+ "libc",
+ "reth",
+ "serde",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber 0.3.22",
+]
+
+[[package]]
 name = "base-flashtypes"
 version = "0.2.1"
 dependencies = [
@@ -1504,13 +1533,6 @@ dependencies = [
  "rstest",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "base-reth-cli"
-version = "0.2.1"
-dependencies = [
- "reth",
 ]
 
 [[package]]
@@ -1572,7 +1594,7 @@ dependencies = [
 name = "base-reth-node"
 version = "0.2.1"
 dependencies = [
- "base-reth-cli",
+ "base-cli",
  "base-reth-runner",
  "clap",
  "once_cell",

@@ -52,7 +52,7 @@ codegen-units = 1
 [workspace.dependencies]
 # local
 base-fbal = { path = "crates/fbal" }
-base-reth-cli = { path = "crates/cli" }
+base-cli = { path = "crates/cli" }
 base-reth-rpc = { path = "crates/rpc" }
 base-reth-rpc-types = { path = "crates/reth-rpc-types" }
 base-tracex = { path = "crates/tracex" }
