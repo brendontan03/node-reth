@@ -90,22 +90,6 @@ impl Account {
     }
 
     /// Build a signed EIP-1559 ETH transfer transaction.
-    ///
-    /// This is a convenience method for creating simple ETH transfer transactions
-    /// in tests without needing to manually construct the transaction.
-    ///
-    /// # Arguments
-    ///
-    /// * `to` - The recipient address
-    /// * `amount` - The amount of wei to transfer
-    /// * `nonce` - The transaction nonce
-    /// * `chain_id` - The chain ID for the transaction
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let tx = alice.build_eth_transfer(bob.address, 1_000_000, 0, 84532);
-    /// ```
     pub fn build_eth_transfer(
         &self,
         to: Address,

@@ -288,10 +288,6 @@ impl LocalNode {
     }
 
     /// Creates a test database with a configurable map size to reduce memory usage.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_size` - Maximum map size in bytes.
     fn create_test_database_with_size(max_size: usize) -> Result<Arc<TempDatabase<DatabaseEnv>>> {
         let path = tempdir_path();
         let emsg = format!("{ERROR_DB_CREATION}: {path:?}");

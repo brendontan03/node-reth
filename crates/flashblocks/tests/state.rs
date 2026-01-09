@@ -1,24 +1,23 @@
 //! Integration tests that stress Flashblocks state handling.
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
-use alloy_eips::{BlockHashOrNumber, Encodable2718};
-use alloy_primitives::{Address, Bytes, U256, map::foldhash::HashMap};
+use alloy_eips::BlockHashOrNumber;
+use alloy_primitives::{Address, U256, map::foldhash::HashMap};
 use base_flashtypes::Flashblock;
 use base_reth_flashblocks::{FlashblocksAPI, FlashblocksState, PendingBlocksAPI};
 use base_reth_test_utils::{
-    FlashblockBuilder, LocalNodeProvider, ParentBlockInfo, TestAccounts,
-    TestHarness as BaseTestHarness,
+    FlashblockBuilder, LocalNodeProvider, ParentBlockInfo, TestHarness as BaseTestHarness,
 };
 use op_alloy_network::BlockResponse;
 use reth::{
     chainspec::EthChainSpec,
-    providers::{AccountReader, BlockNumReader, BlockReader},
+    providers::{AccountReader, BlockReader},
 };
-use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
-use reth_primitives_traits::{Account, Block as BlockT, RecoveredBlock};
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_primitives_traits::{Account, Block as BlockT};
 use reth_provider::{ChainSpecProvider, StateProviderFactory};
-use tokio::time::sleep;
+
 // The amount of time to wait (in milliseconds) after sending a new flashblock or canonical block
 // so it can be processed by the state processor
 const SLEEP_TIME: u64 = 10;
@@ -54,7 +53,7 @@ impl TestHarness {
             .expect("able to recover block");
         flashblocks.on_canonical_block_received(genesis_block);
 
-        let accounts: TestAccounts = node.accounts().clone();
+        let accounts = node.accounts().clone();
 
         let mut user_to_address = HashMap::default();
         user_to_address.insert(User::Alice, accounts.alice.address);
@@ -117,15 +116,8 @@ impl TestHarness {
         self.provider.chain_spec().chain_id()
     }
 
-    /// Get parent block info for the current latest block, used by FlashblockBuilder.
     fn parent_block_info(&self) -> ParentBlockInfo {
-        let block = self.node.latest_block();
-        ParentBlockInfo {
-            number: block.number,
-            hash: block.hash(),
-            gas_limit: block.gas_limit,
-            timestamp: block.timestamp,
-        }
+        self.node.parent_block_info()
     }
 
     fn build_transaction_to_send_eth(
@@ -154,36 +146,23 @@ impl TestHarness {
 
     async fn send_flashblock(&self, flashblock: Flashblock) {
         self.node
-            .send_flashblock(flashblock)
+            .send_flashblock_and_wait(flashblock, SLEEP_TIME)
             .await
             .expect("flashblocks channel should accept payload");
-        sleep(Duration::from_millis(SLEEP_TIME)).await;
     }
 
-    async fn new_canonical_block_without_processing(
-        &mut self,
-        user_transactions: Vec<OpTransactionSigned>,
-    ) -> RecoveredBlock<OpBlock> {
-        let previous_tip =
-            self.provider.best_block_number().expect("able to read best block number");
-        let txs: Vec<Bytes> =
-            user_transactions.into_iter().map(|tx| tx.encoded_2718().into()).collect();
-        self.node.build_block_from_transactions(txs).await.expect("able to build block");
-        let target_block_number = previous_tip + 1;
-
-        let block = self
-            .provider
-            .block(BlockHashOrNumber::Number(target_block_number))
-            .expect("able to load block")
-            .expect("new canonical block should be available after building payload");
-
-        block.try_into_recovered().expect("able to recover newly built block")
+    async fn new_canonical_block_without_processing(&self, transactions: Vec<OpTransactionSigned>) {
+        self.node
+            .new_canonical_block_without_processing(transactions)
+            .await
+            .expect("able to build canonical block");
     }
 
-    async fn new_canonical_block(&mut self, user_transactions: Vec<OpTransactionSigned>) {
-        let block = self.new_canonical_block_without_processing(user_transactions).await;
-        self.flashblocks.on_canonical_block_received(block);
-        sleep(Duration::from_millis(SLEEP_TIME)).await;
+    async fn new_canonical_block(&self, transactions: Vec<OpTransactionSigned>) {
+        self.node
+            .new_canonical_block(transactions, SLEEP_TIME)
+            .await
+            .expect("able to build canonical block");
     }
 }
 
@@ -388,7 +367,7 @@ async fn test_state_overrides_persisted_across_blocks() {
 
 #[tokio::test]
 async fn test_only_current_pending_state_cleared_upon_canonical_block_reorg() {
-    let mut test = TestHarness::new().await;
+    let test = TestHarness::new().await;
 
     test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
     assert_eq!(
@@ -516,7 +495,7 @@ async fn test_nonce_uses_pending_canon_block_instead_of_latest() {
     // causing it to return an n+1 nonce instead of n
     // because underlying reth node `latest` block is already updated, but
     // relevant pending state has not been cleared yet
-    let mut test = TestHarness::new().await;
+    let test = TestHarness::new().await;
 
     test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
     test.send_flashblock(
@@ -707,7 +686,7 @@ async fn test_duplicate_flashblock_ignored() {
 
 #[tokio::test]
 async fn test_progress_canonical_blocks_without_flashblocks() {
-    let mut test = TestHarness::new().await;
+    let test = TestHarness::new().await;
 
     let genesis_block = test.node.latest_block();
     assert_eq!(genesis_block.number, 0);

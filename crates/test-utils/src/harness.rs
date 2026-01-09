@@ -2,7 +2,7 @@
 
 use std::{sync::Arc, time::Duration};
 
-use alloy_eips::{BlockHashOrNumber, eip7685::Requests};
+use alloy_eips::{BlockHashOrNumber, Encodable2718, eip7685::Requests};
 use alloy_primitives::{B64, B256, Bytes};
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types::BlockNumberOrTag;
@@ -18,7 +18,7 @@ use reth::{
 };
 use reth_e2e_test_utils::Adapter;
 use reth_optimism_node::OpNode;
-use reth_optimism_primitives::OpBlock;
+use reth_optimism_primitives::{OpBlock, OpTransactionSigned};
 use reth_primitives_traits::{Block as BlockT, RecoveredBlock};
 use tokio::time::sleep;
 
@@ -214,6 +214,17 @@ impl TestHarness {
         BlockT::try_into_recovered(block).expect("able to recover canonical block")
     }
 
+    /// Get parent block info for the current latest block, used by FlashblockBuilder.
+    pub fn parent_block_info(&self) -> crate::ParentBlockInfo {
+        let block = self.latest_block();
+        crate::ParentBlockInfo {
+            number: block.number,
+            hash: block.hash(),
+            gas_limit: block.gas_limit,
+            timestamp: block.timestamp,
+        }
+    }
+
     /// Access the shared Flashblocks state for assertions or manual driving.
     pub fn flashblocks_state(&self) -> Arc<LocalFlashblocksState> {
         self.node.flashblocks_state()
@@ -224,6 +235,20 @@ impl TestHarness {
         self.node.send_flashblock(flashblock).await
     }
 
+    /// Send a flashblock and wait for the state processor to process it.
+    ///
+    /// This is useful in tests that need to verify state after sending a flashblock,
+    /// as the state processor runs asynchronously.
+    pub async fn send_flashblock_and_wait(
+        &self,
+        flashblock: Flashblock,
+        delay_ms: u64,
+    ) -> Result<()> {
+        self.send_flashblock(flashblock).await?;
+        sleep(Duration::from_millis(delay_ms)).await;
+        Ok(())
+    }
+
     /// Send a batch of flashblocks sequentially, awaiting each confirmation.
     pub async fn send_flashblocks<I>(&self, flashblocks: I) -> Result<()>
     where
@@ -232,6 +257,43 @@ impl TestHarness {
         for flashblock in flashblocks {
             self.send_flashblock(flashblock).await?;
         }
+        Ok(())
+    }
+
+    /// Build a new canonical block from the given transactions without notifying flashblocks state.
+    ///
+    /// This is useful for testing race conditions where the canonical block is built but
+    /// the flashblocks state hasn't been updated yet.
+    pub async fn new_canonical_block_without_processing(
+        &self,
+        transactions: Vec<OpTransactionSigned>,
+    ) -> Result<RecoveredBlock<OpBlock>> {
+        let provider = self.blockchain_provider();
+        let previous_tip = provider.best_block_number()?;
+        let txs: Vec<Bytes> = transactions.into_iter().map(|tx| tx.encoded_2718().into()).collect();
+        self.build_block_from_transactions(txs).await?;
+        let target_block_number = previous_tip + 1;
+
+        let block =
+            provider.block(BlockHashOrNumber::Number(target_block_number))?.ok_or_else(|| {
+                eyre!("new canonical block should be available after building payload")
+            })?;
+
+        BlockT::try_into_recovered(block).map_err(|_| eyre!("unable to recover newly built block"))
+    }
+
+    /// Build a new canonical block and notify the flashblocks state.
+    ///
+    /// This builds a block from the given transactions, notifies the flashblocks state,
+    /// and waits for the state processor to process it.
+    pub async fn new_canonical_block(
+        &self,
+        transactions: Vec<OpTransactionSigned>,
+        delay_ms: u64,
+    ) -> Result<()> {
+        let block = self.new_canonical_block_without_processing(transactions).await?;
+        self.flashblocks_state().on_canonical_block_received(block);
+        sleep(Duration::from_millis(delay_ms)).await;
         Ok(())
     }
 }

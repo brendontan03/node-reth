@@ -29,25 +29,6 @@ pub struct ParentBlockInfo {
 ///
 /// This builder provides a fluent API for creating flashblocks for testing purposes.
 /// It supports both base flashblocks (index 0) and delta flashblocks (index > 0).
-///
-/// # Example
-///
-/// ```ignore
-/// let parent = ParentBlockInfo {
-///     number: 0,
-///     hash: latest_block.hash(),
-///     gas_limit: latest_block.gas_limit,
-///     timestamp: latest_block.timestamp,
-/// };
-///
-/// // Create a base flashblock (index 0) with the L1 block info deposit tx
-/// let base = FlashblockBuilder::new_base(&parent).build();
-///
-/// // Create a delta flashblock (index 1) with user transactions
-/// let delta = FlashblockBuilder::new(&parent, 1)
-///     .with_transactions(vec![signed_tx])
-///     .build();
-/// ```
 #[derive(Debug)]
 pub struct FlashblockBuilder {
     transactions: Vec<Bytes>,
