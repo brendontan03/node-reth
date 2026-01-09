@@ -12,7 +12,7 @@ use base_flashtypes::{
     ExecutionPayloadBaseV1, ExecutionPayloadFlashblockDeltaV1, Flashblock, Metadata,
 };
 use base_reth_test_utils::{
-    Account, FlashblocksHarness, L1_BLOCK_INFO_DEPOSIT_TX, Minimal7702Account, SignerSync,
+    Account, TestHarness, L1_BLOCK_INFO_DEPOSIT_TX, Minimal7702Account, SignerSync,
 };
 use eyre::Result;
 use op_alloy_network::ReceiptResponse;
@@ -23,14 +23,14 @@ const BASE_CUMULATIVE_GAS: u64 = 500000;
 
 /// Test setup that holds harness and deployed contract info
 struct TestSetup {
-    harness: FlashblocksHarness,
+    harness: TestHarness,
     account_contract_address: Address,
     account_deploy_tx: Bytes,
 }
 
 impl TestSetup {
     async fn new() -> Result<Self> {
-        let harness = FlashblocksHarness::new().await?;
+        let harness = TestHarness::new().await?;
         let deployer = &harness.accounts().deployer;
 
         // Deploy Minimal7702Account contract

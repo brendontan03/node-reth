@@ -1,12 +1,13 @@
-//! Unified test harness combining node and engine helpers, plus optional flashblocks adapter.
+//! Unified test harness combining node, engine, flashblocks, and test account helpers.
 
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use alloy_eips::{BlockHashOrNumber, eip7685::Requests};
 use alloy_primitives::{B64, B256, Bytes};
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types::BlockNumberOrTag;
 use alloy_rpc_types_engine::PayloadAttributes;
+use base_flashtypes::Flashblock;
 use eyre::{Result, eyre};
 use futures_util::Future;
 use op_alloy_network::Optimism;
@@ -25,11 +26,15 @@ use crate::{
     BLOCK_BUILD_DELAY_MS, BLOCK_TIME_SECONDS, GAS_LIMIT, L1_BLOCK_INFO_DEPOSIT_TX,
     NODE_STARTUP_DELAY_MS, TestAccounts,
     engine::{EngineApi, IpcEngine},
-    node::{LocalNode, LocalNodeProvider, OpAddOns, OpBuilder, default_launcher},
+    node::{LocalFlashblocksState, LocalNode, LocalNodeProvider, OpAddOns, OpBuilder, default_launcher},
     tracing::init_silenced_tracing,
 };
 
-/// High-level façade that bundles a local node, engine API client, and common helpers.
+/// High-level façade that bundles a local node, engine API client, flashblocks support,
+/// and common helpers.
+///
+/// Flashblocks support is always enabled. The harness provides methods to send flashblocks
+/// and access the in-memory pending state.
 #[derive(Debug)]
 pub struct TestHarness {
     node: LocalNode,
@@ -38,9 +43,19 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    /// Launch a new harness using the default launcher configuration.
+    /// Launch a new harness with automatic canonical processing.
     pub async fn new() -> Result<Self> {
-        Self::with_launcher(default_launcher).await
+        init_silenced_tracing();
+        let node = LocalNode::new().await?;
+        Self::from_node(node).await
+    }
+
+    /// Launch a harness with manual canonical processing.
+    ///
+    /// Use this when tests need to control exactly when canonical blocks are processed
+    /// (e.g., to reproduce race conditions).
+    pub async fn manual_canonical() -> Result<Self> {
+        Self::manual_canonical_with_launcher(default_launcher).await
     }
 
     /// Launch the harness with a custom node launcher (e.g. to tweak components).
@@ -50,7 +65,18 @@ impl TestHarness {
         LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
     {
         init_silenced_tracing();
-        let node = LocalNode::new(launcher).await?;
+        let node = LocalNode::with_launcher(launcher).await?;
+        Self::from_node(node).await
+    }
+
+    /// Launch the harness with a custom launcher and manual canonical processing.
+    pub async fn manual_canonical_with_launcher<L, LRet>(launcher: L) -> Result<Self>
+    where
+        L: FnOnce(OpBuilder) -> LRet,
+        LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
+    {
+        init_silenced_tracing();
+        let node = LocalNode::manual_canonical_with_launcher(launcher).await?;
         Self::from_node(node).await
     }
 
@@ -186,6 +212,27 @@ impl TestHarness {
             .expect("able to load canonical block")
             .expect("canonical block exists");
         BlockT::try_into_recovered(block).expect("able to recover canonical block")
+    }
+
+    /// Access the shared Flashblocks state for assertions or manual driving.
+    pub fn flashblocks_state(&self) -> Arc<LocalFlashblocksState> {
+        self.node.flashblocks_state()
+    }
+
+    /// Send a single flashblock through the harness and await completion.
+    pub async fn send_flashblock(&self, flashblock: Flashblock) -> Result<()> {
+        self.node.send_flashblock(flashblock).await
+    }
+
+    /// Send a batch of flashblocks sequentially, awaiting each confirmation.
+    pub async fn send_flashblocks<I>(&self, flashblocks: I) -> Result<()>
+    where
+        I: IntoIterator<Item = Flashblock>,
+    {
+        for flashblock in flashblocks {
+            self.send_flashblock(flashblock).await?;
+        }
+        Ok(())
     }
 }
 

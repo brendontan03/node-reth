@@ -21,15 +21,12 @@ pub use engine::{EngineAddress, EngineApi, EngineProtocol, HttpEngine, IpcEngine
 mod fixtures;
 pub use fixtures::{create_provider_factory, load_genesis};
 
-mod flashblocks_harness;
-pub use flashblocks_harness::FlashblocksHarness;
-
 mod harness;
 pub use harness::TestHarness;
 
 mod node;
 pub use node::{
-    FlashblocksLocalNode, FlashblocksParts, LocalFlashblocksState, LocalNode, LocalNodeProvider,
+    FlashblocksParts, LocalFlashblocksState, LocalNode, LocalNodeProvider,
     OpAddOns, OpBuilder, OpComponentsBuilder, OpTypes, default_launcher,
 };
 

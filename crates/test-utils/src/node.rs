@@ -51,11 +51,15 @@ pub type LocalNodeProvider = BlockchainProvider<NodeTypesWithDBAdapter<OpNode, T
 pub type LocalFlashblocksState = FlashblocksState<LocalNodeProvider>;
 
 /// Handle to a launched local node along with the resources required to keep it alive.
+///
+/// Flashblocks support is always enabled. All nodes include flashblocks RPC extensions and
+/// maintain in-memory pending state.
 pub struct LocalNode {
     pub(crate) http_api_addr: SocketAddr,
     engine_ipc_path: String,
     pub(crate) ws_api_addr: SocketAddr,
     provider: LocalNodeProvider,
+    parts: FlashblocksParts,
     _node_exit_future: NodeExitFuture,
     _node: Box<dyn Any + Sync + Send>,
     _task_manager: TaskManager,
@@ -240,13 +244,35 @@ pub async fn default_launcher(
 }
 
 impl LocalNode {
+    /// Launch a new local node with flashblocks and automatic canonical processing.
+    pub async fn new() -> Result<Self> {
+        Self::with_launcher(default_launcher).await
+    }
+
+    /// Launch a node with flashblocks but manual canonical processing.
+    ///
+    /// Use this when tests need to control exactly when canonical blocks are processed
+    /// (e.g., to reproduce race conditions).
+    pub async fn manual_canonical() -> Result<Self> {
+        Self::manual_canonical_with_launcher(default_launcher).await
+    }
+
     /// Launch a new local node using the provided launcher function.
-    pub async fn new<L, LRet>(launcher: L) -> Result<Self>
+    pub async fn with_launcher<L, LRet>(launcher: L) -> Result<Self>
     where
         L: FnOnce(OpBuilder) -> LRet,
         LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
     {
-        build_node(launcher).await
+        build_node(launcher, true).await
+    }
+
+    /// Launch a node with custom launcher and manual canonical processing.
+    pub async fn manual_canonical_with_launcher<L, LRet>(launcher: L) -> Result<Self>
+    where
+        L: FnOnce(OpBuilder) -> LRet,
+        LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
+    {
+        build_node(launcher, false).await
     }
 
     /// Creates a test database with a smaller map size to reduce memory usage.
@@ -296,9 +322,24 @@ impl LocalNode {
     pub fn ws_url(&self) -> String {
         format!("ws://{}", self.ws_api_addr)
     }
+
+    /// Access the shared Flashblocks state for assertions or manual driving.
+    pub fn flashblocks_state(&self) -> Arc<LocalFlashblocksState> {
+        self.parts.state()
+    }
+
+    /// Send a flashblock through the background processor and await completion.
+    pub async fn send_flashblock(&self, flashblock: Flashblock) -> Result<()> {
+        self.parts.send(flashblock).await
+    }
+
+    /// Get a reference to the flashblocks parts for advanced usage.
+    pub fn flashblocks_parts(&self) -> &FlashblocksParts {
+        &self.parts
+    }
 }
 
-async fn build_node<L, LRet>(launcher: L) -> Result<LocalNode>
+async fn build_node<L, LRet>(launcher: L, process_canonical: bool) -> Result<LocalNode>
 where
     L: FnOnce(OpBuilder) -> LRet,
     LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
@@ -339,6 +380,10 @@ where
     node_config =
         node_config.with_datadir_args(DatadirArgs { datadir: datadir_path, ..Default::default() });
 
+    // Set up flashblocks extensions
+    let extensions = FlashblocksNodeExtensions::new(process_canonical);
+    let wrapped_launcher = extensions.wrap_launcher(launcher);
+
     let builder = NodeBuilder::new(node_config.clone())
         .with_database(temp_db)
         .with_launch_context(exec.clone())
@@ -347,7 +392,7 @@ where
         .with_add_ons(node.add_ons());
 
     let NodeHandle { node: node_handle, node_exit_future } =
-        builder.launch_with_fn(launcher).await?;
+        builder.launch_with_fn(wrapped_launcher).await?;
 
     let http_api_addr = node_handle
         .rpc_server_handle()
@@ -362,11 +407,14 @@ where
     let engine_ipc_path = node_config.rpc.auth_ipc_path;
     let provider = node_handle.provider().clone();
 
+    let parts = extensions.parts()?;
+
     Ok(LocalNode {
         http_api_addr,
         ws_api_addr,
         engine_ipc_path,
         provider,
+        parts,
         _node_exit_future: node_exit_future,
         _node: Box::new(node_handle),
         _task_manager: tasks,
@@ -385,81 +433,3 @@ fn init_flashblocks_state(
     .clone()
 }
 
-/// Local node wrapper that exposes helpers specific to Flashblocks tests.
-pub struct FlashblocksLocalNode {
-    node: LocalNode,
-    parts: FlashblocksParts,
-}
-
-impl fmt::Debug for FlashblocksLocalNode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FlashblocksLocalNode")
-            .field("node", &self.node)
-            .field("parts", &self.parts)
-            .finish()
-    }
-}
-
-impl FlashblocksLocalNode {
-    /// Launch a flashblocks-enabled node using the default launcher.
-    pub async fn new() -> Result<Self> {
-        Self::with_launcher(default_launcher).await
-    }
-
-    /// Builds a flashblocks-enabled node with canonical block streaming disabled so tests can call
-    /// `FlashblocksState::on_canonical_block_received` at precise points.
-    pub async fn manual_canonical() -> Result<Self> {
-        Self::with_manual_canonical_launcher(default_launcher).await
-    }
-
-    /// Launch a flashblocks-enabled node with a custom launcher and canonical processing enabled.
-    pub async fn with_launcher<L, LRet>(launcher: L) -> Result<Self>
-    where
-        L: FnOnce(OpBuilder) -> LRet,
-        LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
-    {
-        Self::with_launcher_inner(launcher, true).await
-    }
-
-    /// Same as [`Self::with_launcher`] but leaves canonical processing to the caller.
-    pub async fn with_manual_canonical_launcher<L, LRet>(launcher: L) -> Result<Self>
-    where
-        L: FnOnce(OpBuilder) -> LRet,
-        LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
-    {
-        Self::with_launcher_inner(launcher, false).await
-    }
-
-    async fn with_launcher_inner<L, LRet>(launcher: L, process_canonical: bool) -> Result<Self>
-    where
-        L: FnOnce(OpBuilder) -> LRet,
-        LRet: Future<Output = eyre::Result<NodeHandle<Adapter<OpNode>, OpAddOns>>>,
-    {
-        let extensions = FlashblocksNodeExtensions::new(process_canonical);
-        let wrapped_launcher = extensions.wrap_launcher(launcher);
-        let node = LocalNode::new(wrapped_launcher).await?;
-
-        let parts = extensions.parts()?;
-        Ok(Self { node, parts })
-    }
-
-    /// Access the shared Flashblocks state for assertions or manual driving.
-    pub fn flashblocks_state(&self) -> Arc<LocalFlashblocksState> {
-        self.parts.state()
-    }
-
-    /// Send a flashblock through the background processor and await completion.
-    pub async fn send_flashblock(&self, flashblock: Flashblock) -> Result<()> {
-        self.parts.send(flashblock).await
-    }
-
-    /// Split the wrapper into the underlying node plus flashblocks parts.
-    pub fn into_parts(self) -> (LocalNode, FlashblocksParts) {
-        (self.node, self.parts)
-    }
-
-    /// Borrow the underlying [`LocalNode`].
-    pub fn as_node(&self) -> &LocalNode {
-        &self.node
-    }
-}

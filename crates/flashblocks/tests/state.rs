@@ -13,8 +13,8 @@ use base_flashtypes::{
 };
 use base_reth_flashblocks::{FlashblocksAPI, FlashblocksState, PendingBlocksAPI};
 use base_reth_test_utils::{
-    FlashblocksHarness, L1_BLOCK_INFO_DEPOSIT_TX, L1_BLOCK_INFO_DEPOSIT_TX_HASH, LocalNodeProvider,
-    TestAccounts,
+    L1_BLOCK_INFO_DEPOSIT_TX, L1_BLOCK_INFO_DEPOSIT_TX_HASH, LocalNodeProvider,
+    TestAccounts, TestHarness as BaseTestHarness,
 };
 use op_alloy_consensus::OpDepositReceipt;
 use op_alloy_network::BlockResponse;
@@ -39,7 +39,7 @@ enum User {
 }
 
 struct TestHarness {
-    node: FlashblocksHarness,
+    node: BaseTestHarness,
     flashblocks: Arc<FlashblocksState<LocalNodeProvider>>,
     provider: LocalNodeProvider,
     user_to_address: HashMap<User, Address>,
@@ -50,7 +50,7 @@ impl TestHarness {
     async fn new() -> Self {
         // These tests simulate pathological timing (missing receipts, reorgs, etc.), so we disable
         // the automatic canonical listener and only apply blocks when the test explicitly requests it.
-        let node = FlashblocksHarness::manual_canonical()
+        let node = BaseTestHarness::manual_canonical()
             .await
             .expect("able to launch flashblocks harness");
         let provider = node.blockchain_provider();

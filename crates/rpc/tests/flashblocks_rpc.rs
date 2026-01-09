@@ -14,7 +14,7 @@ use alloy_rpc_types_eth::{TransactionInput, error::EthRpcErrorCode};
 use base_flashtypes::{
     ExecutionPayloadBaseV1, ExecutionPayloadFlashblockDeltaV1, Flashblock, Metadata,
 };
-use base_reth_test_utils::{DoubleCounter, FlashblocksHarness, L1_BLOCK_INFO_DEPOSIT_TX};
+use base_reth_test_utils::{DoubleCounter, L1_BLOCK_INFO_DEPOSIT_TX, TestHarness};
 use eyre::Result;
 use futures_util::{SinkExt, StreamExt};
 use op_alloy_network::{Optimism, ReceiptResponse, TransactionResponse};
@@ -139,7 +139,7 @@ fn wrap_in_init_code(runtime_hex: &str) -> Bytes {
 }
 
 struct TestSetup {
-    harness: FlashblocksHarness,
+    harness: TestHarness,
     txn_details: TransactionDetails,
 }
 
@@ -170,7 +170,7 @@ struct TransactionDetails {
 
 impl TestSetup {
     async fn new() -> Result<Self> {
-        let harness = FlashblocksHarness::new().await?;
+        let harness = TestHarness::new().await?;
 
         let provider = harness.provider();
         let deployer = &harness.accounts().deployer;

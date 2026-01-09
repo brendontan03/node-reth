@@ -4,7 +4,7 @@
 //! - Basic ERC-20 functionality (transfer, mint, burn, approve, transferFrom)
 //! - TransparentUpgradeableProxy with ERC-20 (USDC-style delegatecall patterns)
 //!
-//! These tests use FlashblocksHarness with manually constructed flashblock payloads
+//! These tests use TestHarness with manually constructed flashblock payloads
 //! to properly test eth_call against contract state.
 //!
 //! Contract sources:
@@ -20,11 +20,11 @@ use base_flashtypes::{
     ExecutionPayloadBaseV1, ExecutionPayloadFlashblockDeltaV1, Flashblock, Metadata,
 };
 use base_reth_test_utils::{
-    FlashblocksHarness, L1_BLOCK_INFO_DEPOSIT_TX, MockERC20, TransparentUpgradeableProxy,
+    TestHarness, L1_BLOCK_INFO_DEPOSIT_TX, MockERC20, TransparentUpgradeableProxy,
 };
 use eyre::Result;
 struct Erc20TestSetup {
-    harness: FlashblocksHarness,
+    harness: TestHarness,
     token_address: Address,
     token_deploy_tx: Bytes,
     proxy_address: Option<Address>,
@@ -33,7 +33,7 @@ struct Erc20TestSetup {
 
 impl Erc20TestSetup {
     async fn new(with_proxy: bool) -> Result<Self> {
-        let harness = FlashblocksHarness::new().await?;
+        let harness = TestHarness::new().await?;
         let deployer = &harness.accounts().deployer;
 
         // Deploy MockERC20 from solmate with constructor args (name, symbol, decimals)
