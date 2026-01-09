@@ -3,7 +3,7 @@
 use std::{sync::Arc, time::Duration};
 
 use alloy_eips::{BlockHashOrNumber, Encodable2718, eip7685::Requests};
-use alloy_primitives::{B64, B256, Bytes};
+use alloy_primitives::{Address, B64, B256, Bytes};
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types::BlockNumberOrTag;
 use alloy_rpc_types_engine::PayloadAttributes;
@@ -14,6 +14,7 @@ use op_alloy_network::Optimism;
 use op_alloy_rpc_types_engine::OpPayloadAttributes;
 use reth::{
     builder::NodeHandle,
+    chainspec::EthChainSpec,
     providers::{BlockNumReader, BlockReader, ChainSpecProvider},
 };
 use reth_e2e_test_utils::Adapter;
@@ -23,7 +24,7 @@ use reth_primitives_traits::{Block as BlockT, RecoveredBlock};
 use tokio::time::sleep;
 
 use crate::{
-    BLOCK_BUILD_DELAY_MS, BLOCK_TIME_SECONDS, GAS_LIMIT, L1_BLOCK_INFO_DEPOSIT_TX,
+    Account, BLOCK_BUILD_DELAY_MS, BLOCK_TIME_SECONDS, GAS_LIMIT, L1_BLOCK_INFO_DEPOSIT_TX,
     NODE_STARTUP_DELAY_MS, TestAccounts,
     engine::{EngineApi, IpcEngine},
     node::{
@@ -31,6 +32,17 @@ use crate::{
     },
     tracing::init_silenced_tracing,
 };
+
+/// Simple enum for referring to test users by name.
+#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
+pub enum User {
+    /// Alice - first test account.
+    Alice,
+    /// Bob - second test account.
+    Bob,
+    /// Charlie - third test account.
+    Charlie,
+}
 
 /// High-level façade that bundles a local node, engine API client, flashblocks support,
 /// and common helpers.
@@ -98,6 +110,40 @@ impl TestHarness {
     /// Access the deterministic test accounts backing the harness.
     pub fn accounts(&self) -> &TestAccounts {
         &self.accounts
+    }
+
+    /// Get the address for a test user.
+    pub fn address(&self, user: User) -> Address {
+        match user {
+            User::Alice => self.accounts.alice.address,
+            User::Bob => self.accounts.bob.address,
+            User::Charlie => self.accounts.charlie.address,
+        }
+    }
+
+    /// Get the account for a test user.
+    pub fn account(&self, user: User) -> &Account {
+        match user {
+            User::Alice => &self.accounts.alice,
+            User::Bob => &self.accounts.bob,
+            User::Charlie => &self.accounts.charlie,
+        }
+    }
+
+    /// Get the chain ID from the chain spec.
+    pub fn chain_id(&self) -> u64 {
+        self.blockchain_provider().chain_spec().chain_id()
+    }
+
+    /// Build a signed ETH transfer transaction between two test users.
+    pub fn build_eth_transfer(
+        &self,
+        from: User,
+        to: User,
+        amount: u128,
+        nonce: u64,
+    ) -> OpTransactionSigned {
+        self.account(from).build_eth_transfer(self.address(to), amount, nonce, self.chain_id())
     }
 
     /// Access the low-level blockchain provider for direct database queries.

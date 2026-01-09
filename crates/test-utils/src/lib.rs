@@ -28,7 +28,7 @@ mod flashblock_builder;
 pub use flashblock_builder::{FlashblockBuilder, ParentBlockInfo};
 
 mod harness;
-pub use harness::TestHarness;
+pub use harness::{TestHarness, User};
 
 mod node;
 pub use node::{

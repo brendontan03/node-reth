@@ -3,47 +3,33 @@
 use std::sync::Arc;
 
 use alloy_eips::BlockHashOrNumber;
-use alloy_primitives::{Address, U256, map::foldhash::HashMap};
-use base_flashtypes::Flashblock;
+use alloy_primitives::U256;
 use base_reth_flashblocks::{FlashblocksAPI, FlashblocksState, PendingBlocksAPI};
-use base_reth_test_utils::{
-    FlashblockBuilder, LocalNodeProvider, ParentBlockInfo, TestHarness as BaseTestHarness,
-};
+use base_reth_test_utils::{FlashblockBuilder, LocalNodeProvider, TestHarness, User};
 use op_alloy_network::BlockResponse;
-use reth::{
-    chainspec::EthChainSpec,
-    providers::{AccountReader, BlockReader},
-};
-use reth_optimism_primitives::OpTransactionSigned;
+use reth::providers::{AccountReader, BlockReader};
 use reth_primitives_traits::{Account, Block as BlockT};
-use reth_provider::{ChainSpecProvider, StateProviderFactory};
+use reth_provider::StateProviderFactory;
 
 // The amount of time to wait (in milliseconds) after sending a new flashblock or canonical block
 // so it can be processed by the state processor
 const SLEEP_TIME: u64 = 10;
 
-#[derive(Eq, PartialEq, Debug, Hash, Clone, Copy)]
-enum User {
-    Alice,
-    Bob,
-    Charlie,
-}
-
-struct TestHarness {
-    node: BaseTestHarness,
+/// Test-specific helpers that extend the base TestHarness for state tests.
+struct StateTest {
+    harness: TestHarness,
     flashblocks: Arc<FlashblocksState<LocalNodeProvider>>,
     provider: LocalNodeProvider,
-    user_to_address: HashMap<User, Address>,
 }
 
-impl TestHarness {
+impl StateTest {
     async fn new() -> Self {
         // These tests simulate pathological timing (missing receipts, reorgs, etc.), so we disable
         // the automatic canonical listener and only apply blocks when the test explicitly requests it.
-        let node =
-            BaseTestHarness::manual_canonical().await.expect("able to launch flashblocks harness");
-        let provider = node.blockchain_provider();
-        let flashblocks = node.flashblocks_state();
+        let harness =
+            TestHarness::manual_canonical().await.expect("able to launch flashblocks harness");
+        let provider = harness.blockchain_provider();
+        let flashblocks = harness.flashblocks_state();
 
         let genesis_block = provider
             .block(BlockHashOrNumber::Number(0))
@@ -53,32 +39,12 @@ impl TestHarness {
             .expect("able to recover block");
         flashblocks.on_canonical_block_received(genesis_block);
 
-        let accounts = node.accounts().clone();
-
-        let mut user_to_address = HashMap::default();
-        user_to_address.insert(User::Alice, accounts.alice.address);
-        user_to_address.insert(User::Bob, accounts.bob.address);
-        user_to_address.insert(User::Charlie, accounts.charlie.address);
-
-        Self { node, flashblocks, provider, user_to_address }
-    }
-
-    fn address(&self, u: User) -> Address {
-        assert!(self.user_to_address.contains_key(&u));
-        self.user_to_address[&u]
-    }
-
-    fn account(&self, u: User) -> &base_reth_test_utils::Account {
-        match u {
-            User::Alice => &self.node.accounts().alice,
-            User::Bob => &self.node.accounts().bob,
-            User::Charlie => &self.node.accounts().charlie,
-        }
+        Self { harness, flashblocks, provider }
     }
 
     fn canonical_account(&self, u: User) -> Account {
         self.provider
-            .basic_account(&self.address(u))
+            .basic_account(&self.harness.address(u))
             .expect("can lookup account state")
             .expect("should be existing account state")
     }
@@ -91,83 +57,33 @@ impl TestHarness {
         self.canonical_balance(u) + U256::from(delta)
     }
 
-    fn account_state(&self, u: User) -> Account {
+    /// Get the pending nonce for a user (canonical + pending transaction count).
+    fn pending_nonce(&self, u: User) -> u64 {
         let basic_account = self.canonical_account(u);
-
-        let nonce = self
+        let pending_count = self
             .flashblocks
             .get_pending_blocks()
-            .get_transaction_count(self.address(u))
+            .get_transaction_count(self.harness.address(u))
             .to::<u64>();
-        let balance = self
-            .flashblocks
-            .get_pending_blocks()
-            .get_balance(self.address(u))
-            .unwrap_or(basic_account.balance);
-
-        Account {
-            nonce: nonce + basic_account.nonce,
-            balance,
-            bytecode_hash: basic_account.bytecode_hash,
-        }
+        basic_account.nonce + pending_count
     }
+}
 
-    fn chain_id(&self) -> u64 {
-        self.provider.chain_spec().chain_id()
-    }
+impl std::ops::Deref for StateTest {
+    type Target = TestHarness;
 
-    fn parent_block_info(&self) -> ParentBlockInfo {
-        self.node.parent_block_info()
-    }
-
-    fn build_transaction_to_send_eth(
-        &self,
-        from: User,
-        to: User,
-        amount: u128,
-    ) -> OpTransactionSigned {
-        self.account(from).build_eth_transfer(
-            self.address(to),
-            amount,
-            self.account_state(from).nonce,
-            self.chain_id(),
-        )
-    }
-
-    fn build_transaction_to_send_eth_with_nonce(
-        &self,
-        from: User,
-        to: User,
-        amount: u128,
-        nonce: u64,
-    ) -> OpTransactionSigned {
-        self.account(from).build_eth_transfer(self.address(to), amount, nonce, self.chain_id())
-    }
-
-    async fn send_flashblock(&self, flashblock: Flashblock) {
-        self.node.send_flashblock(flashblock).await.expect("flashblocks channel should accept payload");
-    }
-
-    async fn new_canonical_block_without_processing(&self, transactions: Vec<OpTransactionSigned>) {
-        self.node
-            .new_canonical_block_without_processing(transactions)
-            .await
-            .expect("able to build canonical block");
-    }
-
-    async fn new_canonical_block(&self, transactions: Vec<OpTransactionSigned>) {
-        self.node
-            .new_canonical_block(transactions, SLEEP_TIME)
-            .await
-            .expect("able to build canonical block");
+    fn deref(&self) -> &Self::Target {
+        &self.harness
     }
 }
 
 #[tokio::test]
 async fn test_state_overrides_persisted_across_flashblocks() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
     assert_eq!(
         test.flashblocks
             .get_pending_blocks()
@@ -190,14 +106,16 @@ async fn test_state_overrides_persisted_across_flashblocks() {
 
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 1)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100_000,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     let pending = test.flashblocks.get_pending_blocks().get_block(true);
     assert!(pending.is_some());
@@ -220,7 +138,9 @@ async fn test_state_overrides_persisted_across_flashblocks() {
         test.expected_pending_balance(User::Bob, 100_000)
     );
 
-    test.send_flashblock(FlashblockBuilder::new(&test.parent_block_info(), 2).build()).await;
+    test.send_flashblock(FlashblockBuilder::new(&test.parent_block_info(), 2).build())
+        .await
+        .unwrap();
 
     let overrides = test
         .flashblocks
@@ -241,11 +161,11 @@ async fn test_state_overrides_persisted_across_flashblocks() {
 
 #[tokio::test]
 async fn test_state_overrides_persisted_across_blocks() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
     let initial_base = FlashblockBuilder::new_base(&test.parent_block_info()).build();
     let initial_block_number = initial_base.metadata.block_number;
-    test.send_flashblock(initial_base).await;
+    test.send_flashblock(initial_base).await.unwrap();
     assert_eq!(
         test.flashblocks
             .get_pending_blocks()
@@ -268,14 +188,16 @@ async fn test_state_overrides_persisted_across_blocks() {
 
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 1)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100_000,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     let pending = test.flashblocks.get_pending_blocks().get_block(true);
     assert!(pending.is_some());
@@ -303,7 +225,8 @@ async fn test_state_overrides_persisted_across_blocks() {
             .with_canonical_block_number(initial_block_number)
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     assert_eq!(
         test.flashblocks
@@ -336,14 +259,16 @@ async fn test_state_overrides_persisted_across_blocks() {
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 1)
             .with_canonical_block_number(initial_block_number)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100_000,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     let overrides = test
         .flashblocks
@@ -364,9 +289,11 @@ async fn test_state_overrides_persisted_across_blocks() {
 
 #[tokio::test]
 async fn test_only_current_pending_state_cleared_upon_canonical_block_reorg() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
     assert_eq!(
         test.flashblocks
             .get_pending_blocks()
@@ -388,14 +315,16 @@ async fn test_only_current_pending_state_cleared_upon_canonical_block_reorg() {
 
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 1)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100_000,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
     let pending = test.flashblocks.get_pending_blocks().get_block(true);
     assert!(pending.is_some());
     let pending = pending.unwrap();
@@ -422,18 +351,21 @@ async fn test_only_current_pending_state_cleared_upon_canonical_block_reorg() {
             .with_canonical_block_number(1)
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 1)
             .with_canonical_block_number(1)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100_000,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
     let pending = test.flashblocks.get_pending_blocks().get_block(true);
     assert!(pending.is_some());
     let pending = pending.unwrap();
@@ -455,13 +387,12 @@ async fn test_only_current_pending_state_cleared_upon_canonical_block_reorg() {
         test.expected_pending_balance(User::Bob, 200_000)
     );
 
-    test.new_canonical_block(vec![test.build_transaction_to_send_eth_with_nonce(
-        User::Alice,
-        User::Bob,
-        100,
-        0,
-    )])
-    .await;
+    test.new_canonical_block(
+        vec![test.build_eth_transfer(User::Alice, User::Bob, 100, 0)],
+        SLEEP_TIME,
+    )
+    .await
+    .unwrap();
 
     let pending = test.flashblocks.get_pending_blocks().get_block(true);
     assert!(pending.is_some());
@@ -492,19 +423,23 @@ async fn test_nonce_uses_pending_canon_block_instead_of_latest() {
     // causing it to return an n+1 nonce instead of n
     // because underlying reth node `latest` block is already updated, but
     // relevant pending state has not been cleared yet
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 1)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     let pending_nonce =
         test.provider.basic_account(&test.address(User::Alice)).unwrap().unwrap().nonce
@@ -515,10 +450,14 @@ async fn test_nonce_uses_pending_canon_block_instead_of_latest() {
                 .to::<u64>();
     assert_eq!(pending_nonce, 1);
 
-    test.new_canonical_block_without_processing(vec![
-        test.build_transaction_to_send_eth_with_nonce(User::Alice, User::Bob, 100, 0),
-    ])
-    .await;
+    test.new_canonical_block_without_processing(vec![test.build_eth_transfer(
+        User::Alice,
+        User::Bob,
+        100,
+        0,
+    )])
+    .await
+    .unwrap();
 
     let pending_nonce =
         test.provider.basic_account(&test.address(User::Alice)).unwrap().unwrap().nonce
@@ -554,13 +493,14 @@ async fn test_nonce_uses_pending_canon_block_instead_of_latest() {
 async fn test_metadata_receipts_are_optional() {
     // Test to ensure that receipts are optional in the metadata
     // and deposit receipts return None for nonce until the canonical block is processed
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
     // Send a flashblock with no receipts (only deposit transaction)
     test.send_flashblock(
         FlashblockBuilder::new_base(&test.parent_block_info()).with_receipts(None).build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     // Verify the block was created with the deposit transaction
     let pending_block =
@@ -578,9 +518,11 @@ async fn test_metadata_receipts_are_optional() {
 
 #[tokio::test]
 async fn test_flashblock_for_new_canonical_block_clears_older_flashblocks_if_non_zero_index() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
 
     let current_block =
         test.flashblocks.get_pending_blocks().get_block(true).expect("should be a block");
@@ -593,7 +535,8 @@ async fn test_flashblock_for_new_canonical_block_clears_older_flashblocks_if_non
             .with_canonical_block_number(100)
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     let current_block = test.flashblocks.get_pending_blocks().get_block(true);
     assert!(current_block.is_none());
@@ -601,9 +544,11 @@ async fn test_flashblock_for_new_canonical_block_clears_older_flashblocks_if_non
 
 #[tokio::test]
 async fn test_flashblock_for_new_canonical_block_works_if_sequential() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
 
     let current_block =
         test.flashblocks.get_pending_blocks().get_block(true).expect("should be a block");
@@ -616,7 +561,8 @@ async fn test_flashblock_for_new_canonical_block_works_if_sequential() {
             .with_canonical_block_number(1)
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     let current_block =
         test.flashblocks.get_pending_blocks().get_block(true).expect("should be a block");
@@ -627,11 +573,13 @@ async fn test_flashblock_for_new_canonical_block_works_if_sequential() {
 
 #[tokio::test]
 async fn test_non_sequential_payload_clears_pending_state() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
     assert!(test.flashblocks.get_pending_blocks().get_block(true).is_none());
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
 
     // Just the block info transaction
     assert_eq!(
@@ -646,36 +594,41 @@ async fn test_non_sequential_payload_clears_pending_state() {
 
     test.send_flashblock(
         FlashblockBuilder::new(&test.parent_block_info(), 3)
-            .with_transactions(vec![test.build_transaction_to_send_eth(
+            .with_transactions(vec![test.build_eth_transfer(
                 User::Alice,
                 User::Bob,
                 100,
+                test.pending_nonce(User::Alice),
             )])
             .build(),
     )
-    .await;
+    .await
+    .unwrap();
 
     assert_eq!(test.flashblocks.get_pending_blocks().is_none(), true);
 }
 
 #[tokio::test]
 async fn test_duplicate_flashblock_ignored() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build()).await;
+    test.send_flashblock(FlashblockBuilder::new_base(&test.parent_block_info()).build())
+        .await
+        .unwrap();
 
     let fb = FlashblockBuilder::new(&test.parent_block_info(), 1)
-        .with_transactions(vec![test.build_transaction_to_send_eth(
+        .with_transactions(vec![test.build_eth_transfer(
             User::Alice,
             User::Bob,
             100_000,
+            test.pending_nonce(User::Alice),
         )])
         .build();
 
-    test.send_flashblock(fb.clone()).await;
+    test.send_flashblock(fb.clone()).await.unwrap();
     let block = test.flashblocks.get_pending_blocks().get_block(true);
 
-    test.send_flashblock(fb.clone()).await;
+    test.send_flashblock(fb.clone()).await.unwrap();
     let block_two = test.flashblocks.get_pending_blocks().get_block(true);
 
     assert_eq!(block, block_two);
@@ -683,28 +636,41 @@ async fn test_duplicate_flashblock_ignored() {
 
 #[tokio::test]
 async fn test_progress_canonical_blocks_without_flashblocks() {
-    let test = TestHarness::new().await;
+    let test = StateTest::new().await;
 
-    let genesis_block = test.node.latest_block();
+    let genesis_block = test.latest_block();
     assert_eq!(genesis_block.number, 0);
     assert_eq!(genesis_block.transaction_count(), 0);
     assert!(test.flashblocks.get_pending_blocks().get_block(true).is_none());
 
-    test.new_canonical_block(vec![test.build_transaction_to_send_eth(User::Alice, User::Bob, 100)])
-        .await;
+    test.new_canonical_block(
+        vec![test.build_eth_transfer(User::Alice, User::Bob, 100, test.pending_nonce(User::Alice))],
+        SLEEP_TIME,
+    )
+    .await
+    .unwrap();
 
-    let block_one = test.node.latest_block();
+    let block_one = test.latest_block();
     assert_eq!(block_one.number, 1);
     assert_eq!(block_one.transaction_count(), 2);
     assert!(test.flashblocks.get_pending_blocks().get_block(true).is_none());
 
-    test.new_canonical_block(vec![
-        test.build_transaction_to_send_eth(User::Bob, User::Charlie, 100),
-        test.build_transaction_to_send_eth(User::Charlie, User::Alice, 1000),
-    ])
-    .await;
+    test.new_canonical_block(
+        vec![
+            test.build_eth_transfer(User::Bob, User::Charlie, 100, test.pending_nonce(User::Bob)),
+            test.build_eth_transfer(
+                User::Charlie,
+                User::Alice,
+                1000,
+                test.pending_nonce(User::Charlie),
+            ),
+        ],
+        SLEEP_TIME,
+    )
+    .await
+    .unwrap();
 
-    let block_two = test.node.latest_block();
+    let block_two = test.latest_block();
     assert_eq!(block_two.number, 2);
     assert_eq!(block_two.transaction_count(), 3);
     assert!(test.flashblocks.get_pending_blocks().get_block(true).is_none());
