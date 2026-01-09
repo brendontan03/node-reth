@@ -47,9 +47,7 @@ pub struct TestHarness {
 impl TestHarness {
     /// Launch a new harness with automatic canonical processing.
     pub async fn new() -> Result<Self> {
-        init_silenced_tracing();
-        let node = LocalNode::new().await?;
-        Self::from_node(node).await
+        Self::with_launcher(default_launcher).await
     }
 
     /// Launch a harness with manual canonical processing.
