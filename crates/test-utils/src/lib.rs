@@ -3,9 +3,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 
-// Used by node.rs for FlashblocksState derive
-use derive_more as _;
-
 mod accounts;
 pub use accounts::{ALICE, Account, BOB, CHARLIE, DEPLOYER, TestAccount, TestAccounts};
 
