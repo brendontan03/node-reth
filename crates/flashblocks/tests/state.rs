@@ -145,10 +145,7 @@ impl TestHarness {
     }
 
     async fn send_flashblock(&self, flashblock: Flashblock) {
-        self.node
-            .send_flashblock_and_wait(flashblock, SLEEP_TIME)
-            .await
-            .expect("flashblocks channel should accept payload");
+        self.node.send_flashblock(flashblock).await.expect("flashblocks channel should accept payload");
     }
 
     async fn new_canonical_block_without_processing(&self, transactions: Vec<OpTransactionSigned>) {

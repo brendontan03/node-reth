@@ -235,20 +235,6 @@ impl TestHarness {
         self.node.send_flashblock(flashblock).await
     }
 
-    /// Send a flashblock and wait for the state processor to process it.
-    ///
-    /// This is useful in tests that need to verify state after sending a flashblock,
-    /// as the state processor runs asynchronously.
-    pub async fn send_flashblock_and_wait(
-        &self,
-        flashblock: Flashblock,
-        delay_ms: u64,
-    ) -> Result<()> {
-        self.send_flashblock(flashblock).await?;
-        sleep(Duration::from_millis(delay_ms)).await;
-        Ok(())
-    }
-
     /// Send a batch of flashblocks sequentially, awaiting each confirmation.
     pub async fn send_flashblocks<I>(&self, flashblocks: I) -> Result<()>
     where
