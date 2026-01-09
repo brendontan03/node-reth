@@ -26,7 +26,9 @@ use crate::{
     BLOCK_BUILD_DELAY_MS, BLOCK_TIME_SECONDS, GAS_LIMIT, L1_BLOCK_INFO_DEPOSIT_TX,
     NODE_STARTUP_DELAY_MS, TestAccounts,
     engine::{EngineApi, IpcEngine},
-    node::{LocalFlashblocksState, LocalNode, LocalNodeProvider, OpAddOns, OpBuilder, default_launcher},
+    node::{
+        LocalFlashblocksState, LocalNode, LocalNodeProvider, OpAddOns, OpBuilder, default_launcher,
+    },
     tracing::init_silenced_tracing,
 };
 

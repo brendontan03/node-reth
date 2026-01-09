@@ -2,13 +2,15 @@
 
 use alloy_consensus::{SignableTransaction, Transaction};
 use alloy_eips::eip2718::Encodable2718;
-use alloy_primitives::{Address, Bytes, FixedBytes, TxHash, address, hex};
+use alloy_primitives::{Address, B256, Bytes, FixedBytes, TxHash, address, hex};
 use alloy_signer::SignerSync;
 use alloy_signer_local::PrivateKeySigner;
 use eyre::Result;
 use op_alloy_network::TransactionBuilder;
 use op_alloy_rpc_types::OpTransactionRequest;
 use reth::{revm::context::TransactionType, rpc::compat::SignTxRequestError};
+use reth_optimism_primitives::OpTransactionSigned;
+use reth_transaction_pool::test_utils::TransactionBuilder as RethTransactionBuilder;
 
 use crate::BASE_CHAIN_ID;
 
@@ -80,6 +82,52 @@ impl Account {
         PrivateKeySigner::from_bytes(&key_fixed)
             .expect("should be able to build the PrivateKeySigner")
             .into()
+    }
+
+    /// Returns the private key as a B256 hash.
+    pub fn private_key_bytes(&self) -> B256 {
+        B256::from_slice(&hex::decode(self.private_key).expect("valid hex-encoded key"))
+    }
+
+    /// Build a signed EIP-1559 ETH transfer transaction.
+    ///
+    /// This is a convenience method for creating simple ETH transfer transactions
+    /// in tests without needing to manually construct the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * `to` - The recipient address
+    /// * `amount` - The amount of wei to transfer
+    /// * `nonce` - The transaction nonce
+    /// * `chain_id` - The chain ID for the transaction
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let tx = alice.build_eth_transfer(bob.address, 1_000_000, 0, 84532);
+    /// ```
+    pub fn build_eth_transfer(
+        &self,
+        to: Address,
+        amount: u128,
+        nonce: u64,
+        chain_id: u64,
+    ) -> OpTransactionSigned {
+        let txn = RethTransactionBuilder::default()
+            .signer(self.private_key_bytes())
+            .chain_id(chain_id)
+            .to(to)
+            .nonce(nonce)
+            .value(amount)
+            .gas_limit(21_000)
+            .max_fee_per_gas(1_000_000_000)
+            .max_priority_fee_per_gas(1_000_000_000)
+            .into_eip1559()
+            .as_eip1559()
+            .expect("should be EIP-1559 transaction")
+            .clone();
+
+        OpTransactionSigned::Eip1559(txn)
     }
 }
 

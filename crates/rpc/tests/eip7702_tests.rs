@@ -12,7 +12,7 @@ use base_flashtypes::{
     ExecutionPayloadBaseV1, ExecutionPayloadFlashblockDeltaV1, Flashblock, Metadata,
 };
 use base_reth_test_utils::{
-    Account, TestHarness, L1_BLOCK_INFO_DEPOSIT_TX, Minimal7702Account, SignerSync,
+    Account, L1_BLOCK_INFO_DEPOSIT_TX, Minimal7702Account, SignerSync, TestHarness,
 };
 use eyre::Result;
 use op_alloy_network::ReceiptResponse;

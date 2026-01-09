@@ -3,6 +3,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 
+// Used by node.rs for FlashblocksState derive
+use derive_more as _;
+
 mod accounts;
 pub use accounts::{ALICE, Account, BOB, CHARLIE, DEPLOYER, TestAccount, TestAccounts};
 
@@ -21,13 +24,16 @@ pub use engine::{EngineAddress, EngineApi, EngineProtocol, HttpEngine, IpcEngine
 mod fixtures;
 pub use fixtures::{create_provider_factory, load_genesis};
 
+mod flashblock_builder;
+pub use flashblock_builder::{FlashblockBuilder, ParentBlockInfo};
+
 mod harness;
 pub use harness::TestHarness;
 
 mod node;
 pub use node::{
-    FlashblocksParts, LocalFlashblocksState, LocalNode, LocalNodeProvider,
-    OpAddOns, OpBuilder, OpComponentsBuilder, OpTypes, default_launcher,
+    FlashblocksParts, LocalFlashblocksState, LocalNode, LocalNodeProvider, OpAddOns, OpBuilder,
+    OpComponentsBuilder, OpTypes, default_launcher,
 };
 
 mod tracing;

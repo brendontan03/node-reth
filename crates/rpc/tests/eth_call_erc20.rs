@@ -20,7 +20,7 @@ use base_flashtypes::{
     ExecutionPayloadBaseV1, ExecutionPayloadFlashblockDeltaV1, Flashblock, Metadata,
 };
 use base_reth_test_utils::{
-    TestHarness, L1_BLOCK_INFO_DEPOSIT_TX, MockERC20, TransparentUpgradeableProxy,
+    L1_BLOCK_INFO_DEPOSIT_TX, MockERC20, TestHarness, TransparentUpgradeableProxy,
 };
 use eyre::Result;
 struct Erc20TestSetup {

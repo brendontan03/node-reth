@@ -432,4 +432,3 @@ fn init_flashblocks_state(
     })
     .clone()
 }
-
