@@ -9,7 +9,7 @@ use alloy_primitives::B256;
 use alloy_rpc_types::TransactionTrait;
 use alloy_rpc_types_eth::state::StateOverride;
 use eyre::eyre;
-use op_alloy_consensus::{OpDepositReceipt, OpTxEnvelope};
+use op_alloy_consensus::{OpDepositReceipt, OpTxEnvelope, OpTxReceipt};
 use op_alloy_rpc_types::{OpTransactionReceipt, Transaction};
 use reth::revm::{Database, DatabaseCommit, context::result::ResultAndState, state::EvmState};
 use reth_evm::{
@@ -132,13 +132,8 @@ where
         effective_gas_price: u128,
     ) -> eyre::Result<ExecutedPendingTransaction> {
         let (deposit_receipt_version, deposit_nonce) = if transaction.is_deposit() {
-            let deposit_receipt = receipt
-                .inner
-                .inner
-                .as_deposit_receipt()
-                .ok_or(eyre!("deposit transaction, non deposit receipt"))?;
-
-            (deposit_receipt.deposit_receipt_version, deposit_receipt.deposit_nonce)
+            let op_receipt = &receipt.inner.inner.receipt;
+            (op_receipt.deposit_receipt_version(), op_receipt.deposit_nonce())
         } else {
             (None, None)
         };
@@ -262,13 +257,8 @@ where
                 self.next_log_index += receipt.logs().len();
 
                 let (deposit_receipt_version, deposit_nonce) = if transaction.is_deposit() {
-                    let deposit_receipt = op_receipt
-                        .inner
-                        .inner
-                        .as_deposit_receipt()
-                        .ok_or(eyre!("deposit transaction, non deposit receipt"))?;
-
-                    (deposit_receipt.deposit_receipt_version, deposit_receipt.deposit_nonce)
+                    let op_receipt_inner = &op_receipt.inner.inner.receipt;
+                    (op_receipt_inner.deposit_receipt_version(), op_receipt_inner.deposit_nonce())
                 } else {
                     (None, None)
                 };
