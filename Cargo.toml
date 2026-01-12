@@ -116,12 +116,12 @@ alloy-rpc-types-engine = "1.0.41"
 
 # op-alloy
 op-alloy-flz = "0.13.1"
-op-alloy-network = "0.22.0"
-op-alloy-rpc-types = "0.22.0"
-op-alloy-consensus = "0.22.0"
-op-alloy-rpc-jsonrpsee = "0.22.0"
-op-alloy-rpc-types-engine = "0.22.0"
-alloy-op-evm = { version = "0.23.3", default-features = false }
+op-alloy-network = "0.23.1"
+op-alloy-rpc-types = "0.23.1"
+op-alloy-consensus = "0.23.1"
+op-alloy-rpc-jsonrpsee = "0.23.1"
+op-alloy-rpc-types-engine = "0.23.1"
+alloy-op-evm = { version = "0.25.2", default-features = false }
 
 # tokio
 tokio = "1.48.0"

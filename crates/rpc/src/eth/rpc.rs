@@ -136,7 +136,7 @@ impl<Eth: EthApiTypes, FB> EthApiExt<Eth, FB> {
 #[async_trait]
 impl<Eth, FB> EthApiOverrideServer for EthApiExt<Eth, FB>
 where
-    Eth: FullEthApi<NetworkTypes = Optimism> + Send + Sync + 'static,
+    Eth: FullEthApi<NetworkTypes = Optimism> + EthApiTypes + Send + Sync + 'static,
     FB: FlashblocksAPI + Send + Sync + 'static,
     jsonrpsee_types::error::ErrorObject<'static>: From<Eth::Error>,
 {
@@ -254,7 +254,16 @@ where
         // state hasn't been cleared yet after canonical block commit
         if let Some(canonical_tx) = EthTransactions::transaction_by_hash(&self.eth_api, tx_hash)
             .await?
-            .map(|tx| tx.into_transaction(self.eth_api.tx_resp_builder()))
+            .map(|tx| {
+                let resp_builder = self.eth_api.converter();
+                tx.into_transaction(resp_builder).map_err(|e| {
+                    ErrorObjectOwned::owned(
+                        jsonrpsee_types::error::INTERNAL_ERROR_CODE,
+                        e.to_string(),
+                        None::<()>,
+                    )
+                })
+            })
             .transpose()?
         {
             return Ok(Some(canonical_tx));
