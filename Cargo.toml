@@ -63,32 +63,32 @@ base-reth-test-utils = { path = "crates/test-utils" }
 base-reth-flashblocks = { path = "crates/flashblocks" }
 
 # reth
-reth = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-ipc = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-evm = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-exex = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-tracing = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-cli-util = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-provider = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-db-common = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-rpc-layer = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-node-core = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-primitives = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-rpc = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-rpc-eth-api = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-rpc-convert = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-optimism-cli = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-optimism-rpc = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-optimism-evm = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-testing-utils = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-optimism-node = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-e2e-test-utils = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-transaction-pool = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-rpc-eth-types = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-primitives-traits = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-optimism-chainspec = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-optimism-primitives = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7" }
-reth-db = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.7", features = [
+reth = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-ipc = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-evm = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-exex = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-tracing = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-cli-util = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-provider = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-db-common = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-rpc-layer = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-node-core = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-primitives = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-rpc = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-rpc-eth-api = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-rpc-convert = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-optimism-cli = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-optimism-rpc = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-optimism-evm = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-testing-utils = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-optimism-node = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-e2e-test-utils = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-transaction-pool = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-rpc-eth-types = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-primitives-traits = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-optimism-chainspec = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-optimism-primitives = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9" }
+reth-db = { git = "https://github.com/brendontan03/reth.git", tag = "v1.9.9", features = [
     "op",
 ] }
 
