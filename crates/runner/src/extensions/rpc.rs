@@ -44,9 +44,13 @@ impl BaseNodeExtension for BaseRpcExtension {
     /// Applies the extension to the supplied builder.
     fn apply(self: Box<Self>, builder: OpBuilder) -> OpBuilder {
         let flashblocks_cell = self.flashblocks_cell;
-        let flashblocks = self.flashblocks;
         let metering_enabled = self.metering_enabled;
         let sequencer_rpc = self.sequencer_rpc;
+
+        let flashblocks = Some(FlashblocksConfig {
+            websocket_url: "wss://mainnet.flashblocks.base.org/ws".to_string(),
+            max_pending_blocks_depth: 3,
+        });
 
         builder.extend_rpc_modules(move |ctx| {
             if metering_enabled {
